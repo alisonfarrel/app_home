@@ -1,5 +1,4 @@
-// Your web app's Firebase configuration
-const firebaseConfig = {
+window.HOGAR_FIREBASE_CONFIG = {
   apiKey: "AIzaSyBixFWbQ70TM7bIqMpcMwNoDTMnRUVrr3E",
   authDomain: "home-addcc.firebaseapp.com",
   projectId: "home-addcc",
