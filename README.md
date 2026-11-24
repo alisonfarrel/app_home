@@ -1,3 +1,65 @@
+# Nuestro Hogar v9.0 — Más alegre y divertido
+
+Esta actualización visual mantiene el modelo de datos y todas las reglas de la v8.0.
+
+## Cambios de la interfaz
+
+- Colores más vivos (menta, coral, lavanda y amarillo suave), con tarjetas, navegación e iconos renovados.
+- Pantalla «Hoy»: mini misión personal y barra de progreso que refleja tareas resueltas sobre las tareas del día y pendientes anteriores.
+- Iconos de categoría en cada tarea y mensajes positivos cuando se termina el día.
+- Pequeña animación de celebración al completar tareas a tiempo; respeta la preferencia de movimiento reducido.
+- Marcador de puntos y desglose intactos, reparto por minutos intacto, sin recompensas nuevas ni alteraciones de puntuación.
+
+## Cómo actualizar
+
+Sube todos los archivos a tu repositorio GitHub Pages, incluido `sw.js`. Comprueba en la cabecera **v9.0**. Si el iPhone muestra una versión anterior, espera a que termine el despliegue, cierra y abre la PWA. No borres los datos del sitio en modo local. La sincronización entre teléfonos sigue requiriendo Firebase.
+
+---
+
+# Nuestro Hogar v8.0 — Rediseño visual
+
+Esta versión renueva la estética de toda la aplicación: paleta verde salvia y crema, tarjetas más claras, marcador de puntos destacado, tipografía y espaciados consistentes, navegación inferior con iconos vectoriales, mejoras en formularios, lista de compra y semana global, y ajustes para pantallas pequeñas y accesibilidad.
+
+**No cambia** el modelo de datos ni la lógica de tareas, recurrencias, puntuación, retrasos o sincronización. Para actualizar, reemplaza los archivos existentes, incluido `sw.js`. Comprueba que aparezca **v8.0** en la cabecera. No borres los datos locales de Safari.
+
+---
+
+# Nuestro Hogar v7.1 — desglose de puntos
+
+Novedad: en la primera pestaña **Hoy**, debajo de los puntos de Alicia y José, pulsa **Ver desglose e historial de puntos** para consultar: tareas completadas a tiempo (+1), retrasos (−1), reasignaciones (−1), total individual e historial de movimientos con tarea, persona, fecha y variación. Se muestran hasta 40 movimientos recientes.
+
+El marcador se recalcula desde los datos de tareas y reasignaciones; no se duplican puntos. Una tarea vencida resta una vez, incluso si permanece varios días pendiente. Las tareas omitidas no puntúan.
+
+La aplicación sigue usando datos locales o Firebase según la configuración existente. Para actualizar GitHub Pages reemplaza todos los archivos de la versión anterior, incluido `sw.js`; comprueba que la cabecera diga **v7.1**. No borres almacenamiento local: podrías perder datos si aún no has conectado Firebase.
+
+---
+
+# Nuestro Hogar v7.0 — actualización
+
+- **Hoy**: marcador de puntos de Alicia y José en la parte superior, justo después del selector de persona y antes de las tareas pendientes. Los puntos son independientes de los minutos de trabajo.
+- **Semana global** sustituye a la antigua pestaña **Semana**. Mantiene la navegación por semanas, los 7 días, las dos columnas por persona y el reparto semanal por tiempo.
+- **Tareas → Editar → Semanal**: el campo **Veces por semana** permite de 1 a 7 días. Cada repetición tiene su propio día y responsable. Los días no se pueden duplicar dentro de la misma tarea; si se eligen días repetidos aparece un aviso. Cada ocurrencia es independiente.
+- Las tareas existentes se mantienen; no se combinan automáticamente tareas duplicadas, porque podría perderse su historial. Puedes fusionarlas manualmente en una sola tarea con varios días y archivar las anteriores.
+- Se conservan la lista de la compra, el historial, las eliminaciones, los recordatorios existentes y las reglas de recompensas.
+
+## Actualización en GitHub Pages
+
+Sustituye todos los archivos del repositorio, incluido `sw.js`, y comprueba que la web indique **v7.0** en la cabecera. No borres los datos locales.
+
+---
+
+## Eliminar una tarea
+
+En **Tareas** pulsa **Eliminar** junto a la tarea, o abre **Editar → Eliminar definitivamente**. Debes confirmar el borrado. Se eliminan el modelo y todas sus repeticiones (pasadas y futuras), registros de finalización, eventos de reasignación y efectos en la puntuación. Es irreversible. Si quieres mantener historial y detener repeticiones futuras, utiliza **Archivar**. Si borras una tarea de cocina vinculada a recogida, se conserva la otra tarea pero ya no quedan vinculadas. Para cancelar solo una fecha, abre las opciones de la repetición y usa **Omitir esta repetición**.
+
+## Versión 6.2 — comprobar que la actualización se ve
+
+En la cabecera de la aplicación debe aparecer **Alicia & José · v6.2**. Si no aparece, sigues usando una versión antigua. Para actualizar GitHub Pages, reemplaza **todos** los archivos del repositorio (incluyendo index.html, app.js, styles.css y sw.js), haz commit en main y comprueba que el despliegue de GitHub Actions termina correctamente. Vuelve a abrir la web en Safari; si usas el icono instalado en la pantalla de inicio, ciérralo y ábrelo después del despliegue. No borres datos del sitio ni desinstales la app para intentar actualizar: el modo local puede perder los datos.
+
+Ruta: **Tareas → Editar** una tarea → **Repetición: Semanal** → **Veces por semana**. Elige 1, 2 o 3 y selecciona **Día** y **Responsable** para cada repetición. Pulsa **Guardar cambios**. La vista **Semana global** refleja el nuevo reparto.
+
+---
+
 # Nuestro Hogar — Alicia y José
 
 Aplicación web instalable (PWA) para iPhone, **sin compilación ni dependencias npm**.
@@ -7,7 +69,7 @@ Aplicación web instalable (PWA) para iPhone, **sin compilación ni dependencias
 - Selector de perfil **Alicia / José**.
 - Mis tareas de hoy, pendientes y días de retraso.
 - Planning semanal navegable (por día y responsable).
-- Listado global: crear, editar, archivar, cambiar periodicidad o responsable.
+- Listado global: crear, editar, archivar, eliminar definitivamente, cambiar periodicidad o responsable.
 - Reasignación de una repetición concreta. Las tareas de cocina y recogida enlazadas conservan la regla «quien cocina no recoge».
 - Repeticiones independientes, incluyendo tareas diarias, semanales, mensuales, anuales, puntuales y según necesidad.
 - Completar/desmarcar/omitir tareas. Las tareas no hechas arrastran su pendiente a los días siguientes.
