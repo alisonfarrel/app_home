@@ -14,9 +14,49 @@ const pretty=s=>parseDate(s).toLocaleDateString('es-ES',{day:'numeric',month:'sh
 const uid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36);
 const noonMillis=s=>parseDate(s).getTime();
 const diffDays=(from,to)=>Math.round((noonMillis(to)-noonMillis(from))/86400000);
+// Minutos de trabajo activo estimado. Los ciclos automáticos no cuentan.
+function defaultMinutes(title,category){
+ const t=String(title||'').toLowerCase();
+ if(/poner (la )?lavadora/.test(t))return 5;
+ if(/recoger (la )?(lavadora|colada)|tender.*doblar/.test(t))return 15;
+ if(/lavadora de ropa/.test(t))return 20; // Compatibilidad con tareas antiguas
+ if(/limpiar baño/.test(t))return 30;
+ if(/batch cooking/.test(t))return 75;
+ if(/hacer la compra/.test(t))return 60;
+ if(/revisar existencias/.test(t))return 20;
+ if(/planificar menú/.test(t))return 25;
+ if(/planchar/.test(t))return 40;
+ if(/preparar comida|preparar cena/.test(t))return 30;
+ if(/recoger y fregar/.test(t))return 20;
+ if(/limpieza semanal de cocina/.test(t))return 30;
+ if(/cambiar y lavar toallas/.test(t))return 15;
+ if(/lavar sábanas/.test(t))return 10;
+ if(/cambiar sábanas/.test(t))return 15;
+ if(/fregar suelos/.test(t))return 25;
+ if(/limpiar polvo|limpiar habitación común/.test(t))return 20;
+ if(/repasar terraza/.test(t))return 15;
+ if(/robot aspirador/.test(t))return 10;
+ if(/basura|reciclaje/.test(t))return 5;
+ if(/revisar planificación/.test(t))return 15;
+ if(/revisar mantenimiento/.test(t))return 10;
+ if(/frigorífico|congelador|campana|cristales|horno|microondas|armarios|desagües|grifería/.test(t))return 35;
+ if(/profunda|organizar almacenaje|mantas|cortinas|rodapiés/.test(t))return 45;
+ return {Cocina:30,Platos:20,Limpieza:25,Ropa:15,Compra:30,Planificación:20,Mantenimiento:15}[category]||20;
+}
+function legacyMinutes(v,title,category){
+ // La versión anterior guardaba una escala 1/2/3/5; migramos usando la tarea, no una conversión arbitraria.
+ const n=Number(v);
+ return Number.isFinite(n)&&n>5?n:defaultMinutes(title,category);
+}
+function minutes(t){const n=Number(t?.minutes);return Number.isFinite(n)&&n>=1?n:defaultMinutes(t?.title||'',t?.category||'');}
+function occurrenceMinutes(o){
+ const n=Number(o?.done?.minutes);
+ return Number.isFinite(n)&&n>0?n:minutes(o.task);
+}
+function formatMinutes(n){const v=Math.round(n);return v>=60?`${Math.floor(v/60)} h${v%60?` ${v%60} min`:''}`:`${v} min`;}
 const seededDate=today();
 function newTask(title,category,owner,day,opts={}) {
- return {id:uid(),title,category,assignee:owner,repeat:opts.repeat||'weekly',days:day===null?[]:[day],nth:opts.nth||1,month:opts.month||1,dueDate:opts.dueDate||seededDate,createdAt:seededDate,active:true,notes:opts.notes||'',pairId:opts.pairId||'',mealRole:opts.mealRole||'',mealKey:opts.mealKey||''};
+ return {id:uid(),title,category,assignee:owner,repeat:opts.repeat||'weekly',days:day===null?[]:[day],nth:opts.nth||1,month:opts.month||1,dueDate:opts.dueDate||seededDate,createdAt:seededDate,active:true,minutes:opts.minutes??defaultMinutes(title,category),notes:opts.notes||'',pairId:opts.pairId||'',mealRole:opts.mealRole||'',mealKey:opts.mealKey||''};
 }
 function makeSeed(){
  const tasks=[];
@@ -33,8 +73,10 @@ function makeSeed(){
  }
  add('Limpiar baño 1','Limpieza','Alicia',2);
  add('Limpiar baño 2','Limpieza','José',2);
- add('Lavadora de ropa 1 (incluye tender y doblar)','Ropa','José',2);
- add('Lavadora de ropa 2 (incluye tender y doblar)','Ropa','Alicia',4);
+ add('Poner lavadora de ropa 1','Ropa','José',2,{minutes:5});
+ add('Recoger lavadora de ropa 1 (tender, doblar y guardar)','Ropa','José',2,{minutes:15});
+ add('Poner lavadora de ropa 2','Ropa','Alicia',4,{minutes:5});
+ add('Recoger lavadora de ropa 2 (tender, doblar y guardar)','Ropa','Alicia',4,{minutes:15});
  add('Limpiar polvo del salón','Limpieza','Alicia',4);
  add('Limpiar habitación común','Limpieza','Alicia',4);
  add('Limpieza semanal de cocina','Limpieza','José',4);
@@ -51,7 +93,8 @@ function makeSeed(){
  add('Fregar suelos compartidos','Limpieza','José',6);
  add('Batch cooking para la semana','Cocina','Alicia',0);
  add('Recoger y fregar después de batch cooking','Platos','José',0);
- add('Lavadora de ropa 3 (solo si hace falta)','Ropa','José',0,{notes:'Si no hay suficiente ropa, se puede omitir esta repetición.'});
+ add('Poner lavadora de ropa 3 (si hace falta)','Ropa','José',0,{minutes:5,notes:'Si no hay suficiente ropa, se puede omitir esta repetición.'});
+ add('Recoger lavadora de ropa 3 (si hace falta)','Ropa','José',0,{minutes:15,notes:'Tender, doblar y guardar. Omitir si no se puso esta lavadora.'});
  add('Revisar planificación semanal','Planificación','Alicia',0);
  add('Revisar mantenimiento pendiente','Mantenimiento','José',0);
  add('Sacar basura cuando se necesite','Mantenimiento','José',null,{repeat:'manual',notes:'Se puede registrar desde el listado global, cuando se realice.'});
@@ -69,13 +112,42 @@ function makeSeed(){
   ['Cortinas y textiles de temporada','Alicia',10],['Revisiones de equipos para el invierno','José',10]
  ];
  for(const [title,owner,month] of quarterly)add(title,owner==='José'?'Mantenimiento':'Limpieza',owner,6,{repeat:'yearly',month,nth:2});
- return {version:1,startedAt:seededDate,tasks,occurrences:{},events:[],shopping:[],settings:{reminders:false,reminderTime:'19:00'}};
+ return {version:1,minutesMigrationV5:true,startedAt:seededDate,tasks,occurrences:{},events:[],shopping:[],settings:{reminders:false,reminderTime:'19:00'}};
+}
+function migrateToMinutes(s){
+ if(!s||!Array.isArray(s.tasks))return s;
+ if(s.minutesMigrationV5)return s;
+ const extra=[];
+ for(const t of s.tasks){
+  const oldTitle=t.title;
+  t.minutes=Number.isFinite(Number(t.minutes))&&Number(t.minutes)>=1?Number(t.minutes):defaultMinutes(oldTitle,t.category);
+  delete t.effort;
+  const match=oldTitle.match(/^Lavadora de ropa ([123]) \(incluye tender y doblar\)$/);
+  if(match){
+   const idx=match[1];
+   t.title=`Poner lavadora de ropa ${idx}`;t.minutes=5;
+   extra.push({...t,id:uid(),title:`Recoger lavadora de ropa ${idx} (tender, doblar y guardar)`,minutes:15});
+  }else if(oldTitle==='Lavadora de ropa 3 (solo si hace falta)'){
+   t.title='Poner lavadora de ropa 3 (si hace falta)';t.minutes=5;
+   extra.push({...t,id:uid(),title:'Recoger lavadora de ropa 3 (si hace falta)',minutes:15});
+  }
+ }
+ s.tasks.push(...extra);
+ for(const [id,o] of Object.entries(s.occurrences||{})){
+  if(o.done){
+   const task=s.tasks.find(t=>id.startsWith(`${t.id}@`));
+   o.done.minutes=Number.isFinite(Number(o.done.minutes))&&Number(o.done.minutes)>=1?Number(o.done.minutes):defaultMinutes(o.done.title||task?.title,o.done.category||task?.category);
+   delete o.done.effort;
+  }
+ }
+ s.minutesMigrationV5=true;
+ return s;
 }
 const STORAGE='nuestro_hogar_v1';
-function loadLocal(){try{const s=JSON.parse(localStorage.getItem(STORAGE));return s?.version===1?s:makeSeed();}catch{return makeSeed();}}
+function loadLocal(){try{const s=JSON.parse(localStorage.getItem(STORAGE));return s?.version===1?migrateToMinutes(s):makeSeed();}catch{return makeSeed();}}
 let state=loadLocal();
 let currentUser=localStorage.getItem('hogar_user')==='José'?'José':'Alicia';
-let tab='today', selectedDay=today(), selectedWeek=weekStart(today()), taskFilter='Todas', modal=null, showDone=false;
+let tab='today', selectedDay=today(), selectedWeek=weekStart(today()), taskFilter='Todas', overviewRange='week', modal=null, showDone=false;
 let cloud=null, cloudReady=false, unsubscribe=null, cloudQueue=Promise.resolve(), notificationTick=null;
 let toastTimer;
 const el=$('#app');
@@ -88,7 +160,7 @@ function mutate(action){
    await cloud.api.runTransaction(cloud.db,async tx=>{
     const snap=await tx.get(cloud.docRef);
     const prior=snap.exists()?snap.data():makeSeed();
-    tx.set(cloud.docRef,reduceState(prior,action));
+    tx.set(cloud.docRef,reduceState(migrateToMinutes(prior),action));
    });
   }).catch(e=>{console.error(e);toast('No se pudo sincronizar: revisa la conexión.');});
  }
@@ -111,7 +183,7 @@ function reduceState(s,a){
   case 'activateManual': s.occurrences[a.id]={...s.occurrences[a.id],assignee:a.assignee,activated:true};break;
   case 'complete': {
    if(s.occurrences[a.id]?.done)break;
-   s.occurrences[a.id]={...s.occurrences[a.id],done:{at:a.at,by:a.by,title:a.title,due:a.due,category:a.category}};break;
+   s.occurrences[a.id]={...s.occurrences[a.id],done:{at:a.at,by:a.by,title:a.title,due:a.due,category:a.category,minutes:a.minutes}};break;
   }
   case 'uncomplete': {
    if(s.occurrences[a.id])delete s.occurrences[a.id].done;break;
@@ -188,7 +260,7 @@ function itemHTML(o,{editable=true}={}){
  const done=!!o.done, skipped=o.skipped;
  return `<article class="task-card ${done?'is-done':''} ${o.late&&!done&&!skipped?'is-late':''}">
  <button class="check ${done?'checked':''}" data-act="${done?'uncomplete':'complete'}" data-id="${esc(o.id)}" aria-label="${done?'Desmarcar':'Completar'} tarea">${done?'✓':''}</button>
- <div class="task-main"><div class="task-name">${esc(o.title)}</div><div class="task-meta"><span>${esc(o.category)}</span><span>·</span><span>${esc(o.assignee)}</span><span>·</span><span>${pretty(o.date)}</span></div>${statusBadge(o)}</div>
+ <div class="task-main"><div class="task-name">${esc(o.title)}</div><div class="task-meta"><span>${esc(o.category)}</span><span>·</span><span>${formatMinutes(occurrenceMinutes(o))}</span><span>·</span><span>${esc(o.assignee)}</span><span>·</span><span>${pretty(o.date)}</span></div>${statusBadge(o)}</div>
  ${editable&&!done&&!skipped?`<button class="dots" aria-label="Opciones de tarea" data-act="options" data-id="${esc(o.id)}">···</button>`:''}
  </article>`;
 }
@@ -214,7 +286,7 @@ function repeatLabel(t){if(t.repeat==='daily')return 'Diaria';if(t.repeat==='wee
 function viewTasks(){const tasks=activeTasks().filter(t=>taskFilter==='Todas'||t.category===taskFilter).sort((a,b)=>a.category.localeCompare(b.category)||a.title.localeCompare(b.title));
  return `${heading('Todas las tareas','Catálogo global editable',`<button class="button primary" data-act="newTask">+ Nueva</button>`)}
  <div class="filter-strip">${['Todas',...cats].map(c=>`<button class="filter ${taskFilter===c?'active':''}" data-filter="${esc(c)}">${esc(c)}</button>`).join('')}</div>
- <div class="task-directory">${tasks.map(t=>`<article class="directory-card"><div><span class="category">${esc(t.category)}</span><h3>${esc(t.title)}</h3><p>${esc(t.assignee)} · ${esc(repeatLabel(t))}</p></div><div class="directory-actions">${t.repeat==='manual'?`<button class="edit-button manual" data-act="manualAdd" data-id="${esc(t.id)}">Hacer hoy</button>`:''}<button class="edit-button" data-act="editTask" data-id="${esc(t.id)}" aria-label="Editar ${esc(t.title)}">Editar</button></div></article>`).join('')}</div>
+ <div class="task-directory">${tasks.map(t=>`<article class="directory-card"><div><span class="category">${esc(t.category)}</span><h3>${esc(t.title)}</h3><p>${esc(t.assignee)} · ${esc(repeatLabel(t))} · ${formatMinutes(minutes(t))}</p></div><div class="directory-actions">${t.repeat==='manual'?`<button class="edit-button manual" data-act="manualAdd" data-id="${esc(t.id)}">Hacer hoy</button>`:''}<button class="edit-button" data-act="editTask" data-id="${esc(t.id)}" aria-label="Editar ${esc(t.title)}">Editar</button></div></article>`).join('')}</div>
  <p class="hint">Las habitaciones personales quedan fuera del planning. Los cambios de responsable en una tarea de cocina actualizan también su tarea vinculada de recogida.</p>`;
 }
 function viewShopping(){const list=[...state.shopping].sort((a,b)=>Number(a.done)-Number(b.done));const undone=list.filter(x=>!x.done).length;
@@ -222,6 +294,53 @@ function viewShopping(){const list=[...state.shopping].sort((a,b)=>Number(a.done
  <div class="section-label"><h2>Productos</h2><span>${undone} pendientes</span></div>
  <div class="shopping-list">${list.length?list.map(i=>`<div class="shopping-item ${i.done?'bought':''}"><button class="check ${i.done?'checked':''}" data-act="shoppingToggle" data-id="${esc(i.id)}" aria-label="Marcar comprado">${i.done?'✓':''}</button><div><strong>${esc(i.name)}</strong>${i.quantity?`<small>${esc(i.quantity)}</small>`:''}</div><button class="dots" data-act="shoppingDelete" data-id="${esc(i.id)}" aria-label="Eliminar producto">×</button></div>`).join(''):`<div class="empty"><div class="empty-icon">▣</div><strong>Lista vacía</strong><p>Añade lo que haga falta comprar.</p></div>`}</div>
  ${list.some(x=>x.done)?`<button class="button light wide" data-act="shoppingClear">Eliminar productos comprados</button>`:''}`;
+}
+function overviewStats(){
+ const end=today();
+ const from=overviewRange==='month'?plusDays(end,-27):overviewRange==='all'?(state.startedAt||end):weekStart(end);
+ const os=allUpTo(end).filter(o=>o.date>=from && o.date<=end && !o.skipped);
+ const stats=Object.fromEntries(names.map(n=>[n,{assigned:0,completed:0,pending:0,overdue:0,onTime:0,categories:{}}]));
+ for(const o of os){
+  const owner=stats[o.assignee];
+  if(owner){owner.assigned++;owner.categories[o.category]=(owner.categories[o.category]||0)+1;if(!o.done){owner.pending++;if(o.date<end)owner.overdue++;}}
+  if(o.done && stats[o.done.by]){stats[o.done.by].completed++;if(dateISO(new Date(o.done.at))<=o.date)stats[o.done.by].onTime++;}
+ }
+ const backlog=Object.fromEntries(names.map(n=>[n,outstanding().filter(o=>o.assignee===n&&o.date<from).length]));
+ return {from,end,os,stats,backlog};
+}
+function splitBar(a,b){const total=a+b;return `<div class="split-bar" role="img" aria-label="Alicia ${a}, José ${b}"><span style="width:${total?100*a/total:50}%"></span><span style="width:${total?100*b/total:50}%"></span></div>`;}
+function weeklyMiniTask(o){
+ const status=o.done?'Hecha':o.skipped?'Omitida':o.date<today()?`${diffDays(o.date,today())}d tarde`:o.date===today()?'Hoy':'Programada';
+ return `<div class="weekly-mini ${o.done?'done':''} ${!o.done&&!o.skipped&&o.date<today()?'late':''}">
+ <button class="check ${o.done?'checked':''}" data-act="${o.done?'uncomplete':'complete'}" data-id="${esc(o.id)}" aria-label="${o.done?'Desmarcar':'Completar'} ${esc(o.title)}">${o.done?'✓':''}</button>
+ <div class="weekly-mini-body"><span class="weekly-mini-title">${esc(o.title)}</span><small>${esc(o.category)} · ${formatMinutes(occurrenceMinutes(o))} · ${status}</small></div>
+ ${!o.done&&!o.skipped?`<button class="weekly-options" data-act="options" data-id="${esc(o.id)}" aria-label="Reasignar u omitir tarea">···</button>`:''}</div>`;
+}
+function viewOverview(){
+ const start=selectedWeek,end=plusDays(start,6),days=Array.from({length:7},(_,i)=>plusDays(start,i));
+ const os=occurrencesBetween(start,end,{includePast:true}).filter(o=>!o.skipped);
+ const counts=Object.fromEntries(names.map(n=>[n,{assigned:0,done:0,late:0,load:0,finished:0,remaining:0}]));
+ for(const o of os){
+  const n=counts[o.assignee];if(!n)continue;
+  const units=occurrenceMinutes(o);n.assigned++;n.load+=units;
+  if(o.done){n.done++;}else{n.remaining+=units;if(o.date<today())n.late++;}
+  if(o.done&&counts[o.done.by])counts[o.done.by].finished+=units;
+ }
+ const a=counts.Alicia,j=counts['José'],completed=os.filter(o=>o.done).length;
+ const total=a.load+j.load;
+ const pct=n=>total?Math.round(100*n/total):50;
+ const backlogs=start<=today()?outstanding().filter(o=>o.date<start):[];
+ const backlogUnits=Object.fromEntries(names.map(n=>[n,backlogs.filter(o=>o.assignee===n).reduce((sum,o)=>sum+occurrenceMinutes(o),0)]));
+ return `${heading('Semana en conjunto','Reparto según minutos de trabajo activo estimado')}
+ <section class="week-control"><button data-act="weekPrev" aria-label="Semana anterior">‹</button><strong>${pretty(start)} — ${pretty(end)}</strong><button data-act="weekNext" aria-label="Semana siguiente">›</button><button class="btn-plain" data-act="weekNow">Hoy</button></section>
+ <section class="overview-panel weekly-summary"><div class="section-label"><h2>Reparto de tiempo semanal</h2><span>${completed}/${os.length} hechas</span></div>
+ ${splitBar(a.load,j.load)}
+ <div class="effort-percentages"><strong>Alicia ${pct(a.load)}%</strong><strong>José ${pct(j.load)}%</strong></div>
+ <div class="weekly-totals"><div><span class="weekly-name"><i class="legend-a"></i>Alicia</span><b>${formatMinutes(a.load)} asignados</b><small>${a.assigned} tareas · ${formatMinutes(a.finished)} hechos · ${formatMinutes(a.remaining)} pendientes</small><small>${a.late} atrasadas</small></div><div><span class="weekly-name"><i class="legend-j"></i>José</span><b>${formatMinutes(j.load)} asignados</b><small>${j.assigned} tareas · ${formatMinutes(j.finished)} hechos · ${formatMinutes(j.remaining)} pendientes</small><small>${j.late} atrasadas</small></div></div>
+ <p class="hint">El porcentaje compara los <strong>minutos activos estimados asignados esta semana</strong>, no el número de tareas. El tiempo realizado se atribuye a quien completa la tarea. Los ciclos automáticos de lavadora y robot no cuentan. Las pendientes anteriores se muestran aparte.</p></section>
+ ${backlogs.length?`<section class="weekly-backlog"><div class="section-label"><h2>Arrastradas de semanas anteriores</h2><span class="warning-text">Alicia ${formatMinutes(backlogUnits.Alicia)} · José ${formatMinutes(backlogUnits['José'])} pendientes</span></div><div class="weekly-backlog-list">${backlogs.map(weeklyMiniTask).join('')}</div></section>`:''}
+ <div class="weekly-days">${days.map(date=>{const dayOS=os.filter(o=>o.date===date),d=parseDate(date);return `<section class="weekly-day ${date===today()?'current':''}"><div class="weekly-day-head"><h2>${weekdays[d.getDay()]} <span>${pretty(date)}</span></h2><span>${dayOS.filter(o=>o.done).length}/${dayOS.length} hechas</span></div><div class="weekly-columns">${names.map(person=>{const mine=dayOS.filter(o=>o.assignee===person);const units=mine.reduce((sum,o)=>sum+occurrenceMinutes(o),0);return `<div class="weekly-person"><div class="weekly-person-title"><span class="avatar ${person==='José'?'jose':''}">${person[0]}</span><strong>${person}</strong><small>${formatMinutes(units)}</small></div>${mine.length?mine.map(weeklyMiniTask).join(''):'<p class="weekly-none">Sin tareas</p>'}</div>`;}).join('')}</div></section>`;}).join('')}</div>
+ <details class="weekly-score"><summary>Ver marcador de recompensas (+1 / −1)</summary>${viewPoints()}</details>`;
 }
 function viewPoints(){const p=score();const rows=names.map(n=>({name:n,score:p.points[n]||0,...p.breakdown[n]})).sort((a,b)=>b.score-a.score);
  return `${heading('Puntos','Cumplimiento y responsabilidad compartida')}<div class="score-hero"><span class="eyebrow">Marcador actual</span><div class="score-grid">${rows.map((x,i)=>`<div class="score-person"><div class="score-avatar ${x.name==='José'?'jose':''}">${x.name[0]}</div><span>${x.name}</span><strong>${x.score>0?'+':''}${x.score}</strong></div>`).join('')}</div></div>
@@ -231,17 +350,17 @@ function viewPoints(){const p=score();const rows=names.map(n=>({name:n,score:p.p
 function viewSettings(){return `${heading('Ajustes','Preferencias de vuestro hogar')}<div class="settings-card"><h2>Acceso</h2><p>Perfil activo</p>${usernameButtons()}<div class="setting-row"><div><b>Almacenamiento</b><small>${cloudReady?'Firebase · sincronizado':'Local · solo este dispositivo'}</small></div><span class="dot ${cloudReady?'connected':''}"></span></div>${cloudReady?'<button class="button light" data-act="logout">Cerrar sesión compartida</button>':'<p class="hint">Para compartir datos entre dos iPhone, configura Firebase siguiendo README.md.</p>'}</div>
  <div class="settings-card"><h2>Recordatorios</h2><p>La aplicación puede avisar de tareas pendientes cuando está abierta. Los avisos en segundo plano requieren configurar un servicio push adicional.</p><label class="toggle-row"><span>Activar avisos en la app</span><input id="reminders" type="checkbox" ${state.settings.reminders?'checked':''}></label><label class="toggle-row"><span>Hora del recordatorio</span><input type="time" id="reminderTime" value="${esc(state.settings.reminderTime||'19:00')}"></label><button class="button light" data-act="requestNotify">Permitir notificaciones</button></div>
  <div class="info"><strong>Sobre el reparto</strong><p>Las tareas personales no están incluidas. El robot funciona automáticamente y solo se programa su limpieza semanal. Las comidas de fin de semana no se asignan.</p></div>`;}
-const navItems=[['today','Hoy','⌂'],['week','Semana','▦'],['tasks','Tareas','☷'],['shopping','Compra','▣'],['points','Puntos','★'],['settings','Ajustes','⚙']];
+const navItems=[['today','Hoy','⌂'],['week','Semana','▦'],['tasks','Tareas','☷'],['shopping','Compra','▣'],['overview','Semana global','◫'],['settings','Ajustes','⚙']];
 function modalHTML(){if(!modal)return '';
  if(modal.kind==='options'){const o=findOccurrence(modal.id);if(!o)return '';
  return `<div class="overlay" data-act="closeModal"><div class="sheet" role="dialog" aria-modal="true" onclick="event.stopPropagation()"><div class="sheet-handle"></div><h2>${esc(o.title)}</h2><p class="muted">${esc(o.assignee)} · Vencimiento: ${pretty(o.date)}${o.late?` · ${o.late} día(s) tarde`:''}</p><div class="field"><label>Reasignar esta repetición a</label><select id="assignTo"><option value="Alicia" ${o.assignee==='Alicia'?'selected':''}>Alicia</option><option value="José" ${o.assignee==='José'?'selected':''}>José</option></select></div><button class="button primary wide" data-act="saveAssignment" data-id="${esc(o.id)}">Guardar responsable (−1 al anterior)</button>${o.pairId?'<p class="hint">Si esta tarea es de cocina o recogida, también se actualizará su pareja de ese día para respetar la regla.</p>':''}<button class="button light wide" data-act="skip" data-id="${esc(o.id)}">Omitir esta repetición (no puntúa)</button><button class="button text wide" data-act="closeModal">Cancelar</button></div></div>`;
  }
  const t=modal.kind==='edit'?state.tasks.find(x=>x.id===modal.id):null;const v=t||newTask('','Limpieza',currentUser,parseDate(today()).getDay());
- return `<div class="overlay" data-act="closeModal"><div class="sheet edit-sheet" role="dialog" aria-modal="true" onclick="event.stopPropagation()"><div class="sheet-handle"></div><h2>${t?'Editar tarea':'Nueva tarea'}</h2><form id="taskForm" class="form-fields"><label>Nombre<input name="title" maxlength="120" required value="${esc(v.title)}" placeholder="Nombre de la tarea"></label><div class="two-col"><label>Categoría<select name="category">${cats.map(c=>`<option ${v.category===c?'selected':''}>${c}</option>`).join('')}</select></label><label>Responsable<select name="assignee">${names.map(n=>`<option ${v.assignee===n?'selected':''}>${n}</option>`).join('')}</select></label></div><div class="two-col"><label>Repetición<select name="repeat" id="taskRepeat">${[['weekly','Semanal'],['daily','Diaria'],['monthly','Mensual'],['yearly','Anual'],['once','Una vez'],['manual','Según necesidad']].map(([key,text])=>`<option value="${key}" ${v.repeat===key?'selected':''}>${text}</option>`).join('')}</select></label><label>Día habitual<select name="day">${weekdays.map((d,i)=>`<option value="${i}" ${(v.days||[1])[0]===i?'selected':''}>${d}</option>`).join('')}</select></label></div><div class="two-col"><label>Semana del mes<select name="nth">${[1,2,3,4].map(x=>`<option value="${x}" ${Number(v.nth)===x?'selected':''}>${x}ª</option>`).join('')}</select></label><label>Mes (si es anual)<select name="month">${Array.from({length:12},(_,i)=>`<option value="${i+1}" ${Number(v.month)===i+1?'selected':''}>${new Date(2026,i,1).toLocaleDateString('es-ES',{month:'long'})}</option>`).join('')}</select></label></div><label>Fecha (si es puntual)<input type="date" name="dueDate" value="${esc(v.dueDate||today())}"></label><label>Notas<textarea name="notes" rows="2">${esc(v.notes||'')}</textarea></label><button class="button primary wide" type="submit">${t?'Guardar cambios':'Crear tarea'}</button></form>${t?`<button class="button danger wide" data-act="archiveTask" data-id="${esc(t.id)}">Archivar tarea</button>`:''}<button class="button text wide" data-act="closeModal">Cancelar</button><p class="hint">Diaria: todos los días. Semanal: día habitual. Mensual: n.º día de semana. Anual: mes y n.º día de semana. Puntual: fecha concreta.</p></div></div>`;
+ return `<div class="overlay" data-act="closeModal"><div class="sheet edit-sheet" role="dialog" aria-modal="true" onclick="event.stopPropagation()"><div class="sheet-handle"></div><h2>${t?'Editar tarea':'Nueva tarea'}</h2><form id="taskForm" class="form-fields"><label>Nombre<input name="title" maxlength="120" required value="${esc(v.title)}" placeholder="Nombre de la tarea"></label><div class="two-col"><label>Categoría<select name="category">${cats.map(c=>`<option ${v.category===c?'selected':''}>${c}</option>`).join('')}</select></label><label>Responsable<select name="assignee">${names.map(n=>`<option ${v.assignee===n?'selected':''}>${n}</option>`).join('')}</select></label></div><div class="two-col"><label>Repetición<select name="repeat" id="taskRepeat">${[['weekly','Semanal'],['daily','Diaria'],['monthly','Mensual'],['yearly','Anual'],['once','Una vez'],['manual','Según necesidad']].map(([key,text])=>`<option value="${key}" ${v.repeat===key?'selected':''}>${text}</option>`).join('')}</select></label><label>Día habitual<select name="day">${weekdays.map((d,i)=>`<option value="${i}" ${(v.days||[1])[0]===i?'selected':''}>${d}</option>`).join('')}</select></label></div><div class="two-col"><label>Semana del mes<select name="nth">${[1,2,3,4].map(x=>`<option value="${x}" ${Number(v.nth)===x?'selected':''}>${x}ª</option>`).join('')}</select></label><label>Mes (si es anual)<select name="month">${Array.from({length:12},(_,i)=>`<option value="${i+1}" ${Number(v.month)===i+1?'selected':''}>${new Date(2026,i,1).toLocaleDateString('es-ES',{month:'long'})}</option>`).join('')}</select></label></div><label>Tiempo activo estimado (minutos)<input type="number" name="minutes" min="1" max="1440" step="1" required value="${minutes(v)}"></label><label>Fecha (si es puntual)<input type="date" name="dueDate" value="${esc(v.dueDate||today())}"></label><label>Notas<textarea name="notes" rows="2">${esc(v.notes||'')}</textarea></label><button class="button primary wide" type="submit">${t?'Guardar cambios':'Crear tarea'}</button></form>${t?`<button class="button danger wide" data-act="archiveTask" data-id="${esc(t.id)}">Archivar tarea</button>`:''}<button class="button text wide" data-act="closeModal">Cancelar</button><p class="hint">Diaria: todos los días. Semanal: día habitual. Mensual: n.º día de semana. Anual: mes y n.º día de semana. Puntual: fecha concreta.</p></div></div>`;
 }
 function render(){
  if(cloud && !cloudReady){renderLogin();return;}
- const content={today:viewToday,week:viewWeek,tasks:viewTasks,shopping:viewShopping,points:viewPoints,settings:viewSettings}[tab]();
+ const content={today:viewToday,week:viewWeek,tasks:viewTasks,shopping:viewShopping,overview:viewOverview,settings:viewSettings}[tab]();
  el.innerHTML=`<div class="shell"><header class="topbar"><div class="brand"><div class="brand-logo">⌂</div><div><strong>Nuestro Hogar</strong><span>Alicia & José</span></div></div><div class="top-right"><span class="sync-status ${cloudReady?'online':''}" title="${cloudReady?'Sincronización conectada':'Modo local'}"></span><button class="profile-dot ${currentUser==='José'?'jose':''}" data-act="switchUser" aria-label="Cambiar usuario">${currentUser[0]}</button></div></header><main>${content}</main><nav class="bottom-nav">${navItems.map(([key,label,glyph])=>`<button data-tab="${key}" class="${tab===key?'active':''}"><span class="nav-icon">${glyph}</span><span>${label}</span></button>`).join('')}</nav></div><div id="toast" class="toast" role="status"></div>${modalHTML()}`;
 }
 function findOccurrence(id){const at=id.lastIndexOf('@');if(at===-1)return null;const t=state.tasks.find(x=>x.id===id.slice(0,at));if(!t)return null;return makeOccurrence(t,id.slice(at+1));}
@@ -251,6 +370,7 @@ function reassignOccurrence(o,to){if(o.assignee===to)return;const at=new Date().
 }
 function handleClick(e){const btn=e.target.closest('button,[data-act],[data-tab],[data-user],[data-filter],[data-day]');if(!btn)return;
  if(btn.dataset.tab){tab=btn.dataset.tab;render();return;}
+ if(btn.dataset.range){overviewRange=btn.dataset.range;render();return;}
  if(btn.dataset.user){currentUser=btn.dataset.user;localStorage.setItem('hogar_user',currentUser);render();return;}
  if(btn.dataset.filter){taskFilter=btn.dataset.filter;render();return;}
  if(btn.dataset.day){selectedDay=btn.dataset.day;render();return;}
@@ -261,7 +381,7 @@ function handleClick(e){const btn=e.target.closest('button,[data-act],[data-tab]
   case 'weekNext':selectedWeek=plusDays(selectedWeek,7);selectedDay=selectedWeek;render();break;
   case 'weekNow':selectedWeek=weekStart(today());selectedDay=today();render();break;
   case 'toggleDone':showDone=!showDone;render();break;
-  case 'complete':{const o=findOccurrence(id);if(o&&!o.done){mutate({type:'complete',id,at:new Date().toISOString(),by:o.assignee,title:o.title,due:o.date,category:o.category});toast(o.late?'Completada fuera de plazo.':'¡Tarea completada! +1 punto.');}break;}
+  case 'complete':{const o=findOccurrence(id);if(o&&!o.done){mutate({type:'complete',id,at:new Date().toISOString(),by:o.assignee,title:o.title,due:o.date,category:o.category,minutes:occurrenceMinutes(o)});toast(o.late?'Completada fuera de plazo.':'¡Tarea completada! +1 punto.');}break;}
   case 'uncomplete':if(confirm('¿Desmarcar esta tarea como completada?'))mutate({type:'uncomplete',id});break;
   case 'options':modal={kind:'options',id};render();break;
   case 'closeModal':modal=null;render();break;
@@ -282,7 +402,7 @@ function handleSubmit(e){if(e.target.id==='shoppingForm'){e.preventDefault();con
  if(e.target.id==='taskForm'){e.preventDefault();const f=new FormData(e.target);const title=String(f.get('title')||'').trim();if(!title)return;
  const prev=modal?.kind==='edit'?state.tasks.find(x=>x.id===modal.id):null;
  const t=prev?{...prev}:newTask(title,String(f.get('category')),String(f.get('assignee')),Number(f.get('day')));
- Object.assign(t,{title,category:String(f.get('category')),assignee:String(f.get('assignee')),repeat:String(f.get('repeat')),days:[Number(f.get('day'))],nth:Number(f.get('nth')),month:Number(f.get('month')),dueDate:String(f.get('dueDate')),notes:String(f.get('notes')||'')});
+ Object.assign(t,{title,category:String(f.get('category')),assignee:String(f.get('assignee')),repeat:String(f.get('repeat')),days:[Number(f.get('day'))],nth:Number(f.get('nth')),month:Number(f.get('month')),dueDate:String(f.get('dueDate')),minutes:Math.max(1,Math.min(1440,Math.round(Number(f.get('minutes'))||1))),notes:String(f.get('notes')||'')});
  mutate({type:prev?'editTask':'addTask',task:t});modal=null;render();toast(prev?'Tarea actualizada.':'Tarea creada.');return;}
  if(e.target.id==='loginForm'){e.preventDefault();const f=new FormData(e.target);const email=String(f.get('email')||'');const pass=String(f.get('password')||'');const b=$('#loginButton');if(b)b.disabled=true;
  cloud.api.signInWithEmailAndPassword(cloud.auth,email,pass).catch(err=>{const div=$('#loginError');if(div)div.textContent='No se pudo iniciar sesión. Comprueba correo, contraseña y Firebase Authentication.';if(b)b.disabled=false;});return;}
@@ -308,11 +428,12 @@ async function initCloud(){if(!window.HOGAR_FIREBASE_CONFIG?.apiKey){render();re
    if(!user){cloudReady=false;renderLogin();return;}
    cloud.docRef=fs.doc(db,'households',user.uid,'state','main');
    try{const snap=await fs.getDoc(cloud.docRef);if(!snap.exists())await fs.setDoc(cloud.docRef,makeSeed());
-    unsubscribe=fs.onSnapshot(cloud.docRef,snap=>{if(snap.exists()){state=snap.data();storeLocal();cloudReady=true;render();}},err=>{console.error(err);toast('Error de sincronización de Firebase.');});
+    else if(!snap.data().minutesMigrationV5)await fs.runTransaction(db,async tx=>{const current=await tx.get(cloud.docRef);if(current.exists()&&!current.data().minutesMigrationV5)tx.set(cloud.docRef,migrateToMinutes(current.data()));});
+    unsubscribe=fs.onSnapshot(cloud.docRef,snap=>{if(snap.exists()){state=migrateToMinutes(snap.data());storeLocal();cloudReady=true;render();}},err=>{console.error(err);toast('Error de sincronización de Firebase.');});
    }catch(err){console.error(err);cloudReady=false;renderLogin();const error=$('#loginError');if(error)error.textContent='No se puede acceder a Firestore. Revisa las reglas del proyecto.';}
   });
  }catch(err){console.error(err);render();setTimeout(()=>toast('No se pudo cargar Firebase; se mantiene la copia local.'),500);}
 }
 if('serviceWorker' in navigator && location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(console.warn);
-setInterval(()=>{if(!cloud||cloudReady){runReminders();if(tab==='today'||tab==='points')render();}},60000);
+setInterval(()=>{if(!cloud||cloudReady){runReminders();if(tab==='today'||tab==='overview')render();}},60000);
 initCloud();

@@ -11,6 +11,8 @@ Aplicación web instalable (PWA) para iPhone, **sin compilación ni dependencias
 - Reasignación de una repetición concreta. Las tareas de cocina y recogida enlazadas conservan la regla «quien cocina no recoge».
 - Repeticiones independientes, incluyendo tareas diarias, semanales, mensuales, anuales, puntuales y según necesidad.
 - Completar/desmarcar/omitir tareas. Las tareas no hechas arrastran su pendiente a los días siguientes.
+- Campo **tiempo activo estimado (minutos)** editable en cada tarea. Por ejemplo: limpiar un baño 30 min, poner una lavadora 5 min, recogerla/tender/doblar 15 min. No cuenta el ciclo automático. Las tareas anteriores se migran a minutos orientativos sin borrar el historial y el tiempo completado queda registrado. Los minutos no afectan a los puntos de recompensa.
+- Pestaña **Semana global**: los siete días de la semana, en dos columnas Alicia / José, con todas las tareas, estado y marcado directo de tareas. Incluye reparto semanal por minutos activos, total realizado y pendiente por persona, atrasos arrastrados de semanas anteriores y marcador de puntos desplegable. Permite navegar entre semanas.
 - Puntuación: **+1** por completar a tiempo, **−1** por incumplir el plazo y **−1** por ceder una tarea a otro usuario. La penalización por retraso se aplica una sola vez por repetición. Omisiones explícitas no puntúan.
 - Lista de compra compartida (cuando se configura Firebase).
 - Recordatorios dentro de la app; notificaciones del navegador cuando la app está abierta y se autoriza.
@@ -105,3 +107,13 @@ La app funciona también en el navegador de escritorio. La instalación en la pa
 | `firestore.rules` | Protección de los datos |
 | `manifest.webmanifest`, `sw.js`, `icons/` | Instalación y caché offline |
 | `.github/workflows/deploy.yml` | Publicación automática en GitHub Pages |
+
+## Reparto por tiempo activo (v5)
+
+La pantalla **Semana global** compara el **tiempo activo estimado** asignado a Alicia y José cada semana. Se edita desde **Tareas → Editar → Tiempo activo estimado (minutos)**. Las tareas reciben una sugerencia inicial editable, expresada en minutos u horas. Los trabajos pendientes de semanas anteriores se muestran separados. El cálculo es una estimación, no un cronómetro.
+
+El marcador de cumplimiento (+1/−1) **es independiente** de estos minutos. La carga realizada atribuye los minutos al usuario que completa la repetición. La valoración de una repetición ya completada queda registrada; los minutos de tareas pendientes anteriores puede cambiar al editar el catálogo.
+
+### Lavadoras por fases
+
+Cada colada se divide en dos tareas separadas: **poner lavadora (5 min)** y **recoger/tender/doblar/guardar (15 min)**. Así pueden tener responsables diferentes. Una instalación que ya tenga tareas de lavadora combinadas convierte esas tareas en «poner lavadora» y crea su pareja «recoger lavadora». Las finalizaciones anteriores siguen registradas; revisar valores iniciales si el trabajo habitual difiere.
