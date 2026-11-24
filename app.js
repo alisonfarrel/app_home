@@ -58,6 +58,15 @@ const seededDate=today();
 function newTask(title,category,owner,day,opts={}) {
  return {id:uid(),title,category,assignee:owner,repeat:opts.repeat||'weekly',days:day===null?[]:[day],nth:opts.nth||1,month:opts.month||1,dueDate:opts.dueDate||seededDate,createdAt:seededDate,active:true,minutes:opts.minutes??defaultMinutes(title,category),notes:opts.notes||'',pairId:opts.pairId||'',mealRole:opts.mealRole||'',mealKey:opts.mealKey||''};
 }
+// Each weekly slot specifies its weekday and owner independently.
+function weeklySlots(t){
+ if(Array.isArray(t.weeklySlots)&&t.weeklySlots.length)return t.weeklySlots.map(x=>({day:Number(x.day),assignee:names.includes(x.assignee)?x.assignee:t.assignee}));
+ return (t.days||[1]).map(day=>({day:Number(day),assignee:t.assignee}));
+}
+function ownerOn(t,date){
+ if(t.repeat==='weekly')return weeklySlots(t).find(slot=>slot.day===parseDate(date).getDay())?.assignee||t.assignee;
+ return t.assignee;
+}
 function makeSeed(){
  const tasks=[];
  const add=(title,cat,owner,day,opts)=>{const t=newTask(title,cat,owner,day,opts);tasks.push(t);return t;};
@@ -173,8 +182,18 @@ function reduceState(s,a){
    const idx=s.tasks.findIndex(t=>t.id===a.task.id);if(idx<0)break;
    const old=s.tasks[idx];s.tasks[idx]={...old,...a.task};
    const newer=s.tasks[idx];
-   if(newer.mealRole==='cook' && newer.pairId){const pair=s.tasks.find(x=>x.id===newer.pairId);if(pair && pair.active)pair.assignee=newer.assignee==='Alicia'?'José':'Alicia';}
-   if(newer.mealRole==='clean' && newer.pairId){const pair=s.tasks.find(x=>x.id===newer.pairId);if(pair && pair.active)pair.assignee=newer.assignee==='Alicia'?'José':'Alicia';}
+   // Keep meal preparation and washing-up assigned to opposite people on each weekday.
+   if(newer.pairId && newer.mealRole && newer.repeat==='weekly'){
+    const pair=s.tasks.find(x=>x.id===newer.pairId);
+    if(pair && pair.active){
+     pair.repeat='weekly';
+     pair.weeklySlots=weeklySlots(newer).map(slot=>({day:slot.day,assignee:slot.assignee==='Alicia'?'José':'Alicia'}));
+     pair.days=pair.weeklySlots.map(slot=>slot.day);
+     pair.assignee=pair.weeklySlots[0].assignee;
+    }
+   }
+   
+   
    break;
   }
   case 'archiveTask': {
@@ -208,14 +227,14 @@ function reduceState(s,a){
 function nthWeekday(date,nth,day){const d=parseDate(date);const first=new Date(d.getFullYear(),d.getMonth(),1,12);const offset=(day-first.getDay()+7)%7;return 1+offset+7*(nth-1)===d.getDate();}
 function isDue(t,date){
  const d=parseDate(date), wd=d.getDay();
- if(t.repeat==='weekly')return (t.days||[]).includes(wd);
+ if(t.repeat==='weekly')return weeklySlots(t).some(slot=>slot.day===wd);
  if(t.repeat==='daily')return true;
  if(t.repeat==='monthly')return nthWeekday(date,Number(t.nth||1),(t.days||[6])[0]);
  if(t.repeat==='yearly')return d.getMonth()+1===Number(t.month||1)&&nthWeekday(date,Number(t.nth||2),(t.days||[6])[0]);
  if(t.repeat==='once')return t.dueDate===date;
  return false;
 }
-function makeOccurrence(t,date){const id=`${t.id}@${date}`;const o=state.occurrences[id]||{};return {id,task:t,date,title:t.title,category:t.category,assignee:o.assignee||t.assignee,done:o.done||null,skipped:!!o.skipped,late:Math.max(0,diffDays(date,today())),pairId:t.pairId};}
+function makeOccurrence(t,date){const id=`${t.id}@${date}`;const o=state.occurrences[id]||{};return {id,task:t,date,title:t.title,category:t.category,assignee:o.assignee||ownerOn(t,date),done:o.done||null,skipped:!!o.skipped,late:Math.max(0,diffDays(date,today())),pairId:t.pairId};}
 function occurrencesBetween(from,to,{includePast=false}={}){
  const list=[];
  for(const t of state.tasks){if(!t.active||t.repeat==='manual')continue;
@@ -246,7 +265,7 @@ function score(){const points={Alicia:0,'José':0};const breakdown={Alicia:{onTi
   if(o.date<today()&&(!o.done||dateISO(new Date(o.done.at))>o.date)){
    // Si se reasignó después del vencimiento, penaliza a quien era responsable en el vencimiento.
    const events=state.events.filter(e=>e.type==='reassign'&&e.occId===o.id&&dateISO(new Date(e.at))<=o.date).sort((a,b)=>a.at.localeCompare(b.at));
-   const accountable=events.length?events[events.length-1].to:o.task.assignee;
+   const accountable=events.length?events[events.length-1].to:ownerOn(o.task,o.date);
    points[accountable]=(points[accountable]||0)-1;breakdown[accountable].late++;
   }
  }
@@ -282,7 +301,7 @@ function viewWeek(){const days=Array.from({length:7},(_,i)=>plusDays(selectedWee
  <div class="task-list">${['Alicia','José'].map(person=>{const group=os.filter(o=>o.date===selectedDay&&o.assignee===person);return `<div class="day-person"><span class="avatar ${person==='José'?'jose':''}">${person[0]}</span><strong>${person}</strong><span class="count">${group.length}</span></div>${group.length?group.map(o=>itemHTML(o)).join(''):'<p class="empty-inline">Sin tareas asignadas</p>'}`;}).join('')}</div>
  ${[5,6,0].includes(parseDate(selectedDay).getDay())?'<p class="hint">Las comidas y cenas del viernes noche, sábado y domingo no se planifican: se improvisan y quien cocina no recoge.</p>':''}`;
 }
-function repeatLabel(t){if(t.repeat==='daily')return 'Diaria';if(t.repeat==='weekly')return 'Semanal · '+(t.days||[]).map(d=>shortdays[d]).join(', ');if(t.repeat==='monthly')return `Mensual · ${t.nth}º ${shortdays[(t.days||[6])[0]]}`;if(t.repeat==='yearly')return `Anual · ${t.nth}º ${shortdays[(t.days||[6])[0]]} de ${new Date(2026,t.month-1,1).toLocaleDateString('es-ES',{month:'long'})}`;if(t.repeat==='once')return `Puntual · ${pretty(t.dueDate)}`;return 'Según necesidad';}
+function repeatLabel(t){if(t.repeat==='daily')return 'Diaria';if(t.repeat==='weekly')return weeklySlots(t).length+'× semana · '+weeklySlots(t).map(slot=>shortdays[slot.day]+' ('+slot.assignee+')').join(', ');if(t.repeat==='monthly')return `Mensual · ${t.nth}º ${shortdays[(t.days||[6])[0]]}`;if(t.repeat==='yearly')return `Anual · ${t.nth}º ${shortdays[(t.days||[6])[0]]} de ${new Date(2026,t.month-1,1).toLocaleDateString('es-ES',{month:'long'})}`;if(t.repeat==='once')return `Puntual · ${pretty(t.dueDate)}`;return 'Según necesidad';}
 function viewTasks(){const tasks=activeTasks().filter(t=>taskFilter==='Todas'||t.category===taskFilter).sort((a,b)=>a.category.localeCompare(b.category)||a.title.localeCompare(b.title));
  return `${heading('Todas las tareas','Catálogo global editable',`<button class="button primary" data-act="newTask">+ Nueva</button>`)}
  <div class="filter-strip">${['Todas',...cats].map(c=>`<button class="filter ${taskFilter===c?'active':''}" data-filter="${esc(c)}">${esc(c)}</button>`).join('')}</div>
@@ -356,7 +375,9 @@ function modalHTML(){if(!modal)return '';
  return `<div class="overlay" data-act="closeModal"><div class="sheet" role="dialog" aria-modal="true" onclick="event.stopPropagation()"><div class="sheet-handle"></div><h2>${esc(o.title)}</h2><p class="muted">${esc(o.assignee)} · Vencimiento: ${pretty(o.date)}${o.late?` · ${o.late} día(s) tarde`:''}</p><div class="field"><label>Reasignar esta repetición a</label><select id="assignTo"><option value="Alicia" ${o.assignee==='Alicia'?'selected':''}>Alicia</option><option value="José" ${o.assignee==='José'?'selected':''}>José</option></select></div><button class="button primary wide" data-act="saveAssignment" data-id="${esc(o.id)}">Guardar responsable (−1 al anterior)</button>${o.pairId?'<p class="hint">Si esta tarea es de cocina o recogida, también se actualizará su pareja de ese día para respetar la regla.</p>':''}<button class="button light wide" data-act="skip" data-id="${esc(o.id)}">Omitir esta repetición (no puntúa)</button><button class="button text wide" data-act="closeModal">Cancelar</button></div></div>`;
  }
  const t=modal.kind==='edit'?state.tasks.find(x=>x.id===modal.id):null;const v=t||newTask('','Limpieza',currentUser,parseDate(today()).getDay());
- return `<div class="overlay" data-act="closeModal"><div class="sheet edit-sheet" role="dialog" aria-modal="true" onclick="event.stopPropagation()"><div class="sheet-handle"></div><h2>${t?'Editar tarea':'Nueva tarea'}</h2><form id="taskForm" class="form-fields"><label>Nombre<input name="title" maxlength="120" required value="${esc(v.title)}" placeholder="Nombre de la tarea"></label><div class="two-col"><label>Categoría<select name="category">${cats.map(c=>`<option ${v.category===c?'selected':''}>${c}</option>`).join('')}</select></label><label>Responsable<select name="assignee">${names.map(n=>`<option ${v.assignee===n?'selected':''}>${n}</option>`).join('')}</select></label></div><div class="two-col"><label>Repetición<select name="repeat" id="taskRepeat">${[['weekly','Semanal'],['daily','Diaria'],['monthly','Mensual'],['yearly','Anual'],['once','Una vez'],['manual','Según necesidad']].map(([key,text])=>`<option value="${key}" ${v.repeat===key?'selected':''}>${text}</option>`).join('')}</select></label><label>Día habitual<select name="day">${weekdays.map((d,i)=>`<option value="${i}" ${(v.days||[1])[0]===i?'selected':''}>${d}</option>`).join('')}</select></label></div><div class="two-col"><label>Semana del mes<select name="nth">${[1,2,3,4].map(x=>`<option value="${x}" ${Number(v.nth)===x?'selected':''}>${x}ª</option>`).join('')}</select></label><label>Mes (si es anual)<select name="month">${Array.from({length:12},(_,i)=>`<option value="${i+1}" ${Number(v.month)===i+1?'selected':''}>${new Date(2026,i,1).toLocaleDateString('es-ES',{month:'long'})}</option>`).join('')}</select></label></div><label>Tiempo activo estimado (minutos)<input type="number" name="minutes" min="1" max="1440" step="1" required value="${minutes(v)}"></label><label>Fecha (si es puntual)<input type="date" name="dueDate" value="${esc(v.dueDate||today())}"></label><label>Notas<textarea name="notes" rows="2">${esc(v.notes||'')}</textarea></label><button class="button primary wide" type="submit">${t?'Guardar cambios':'Crear tarea'}</button></form>${t?`<button class="button danger wide" data-act="archiveTask" data-id="${esc(t.id)}">Archivar tarea</button>`:''}<button class="button text wide" data-act="closeModal">Cancelar</button><p class="hint">Diaria: todos los días. Semanal: día habitual. Mensual: n.º día de semana. Anual: mes y n.º día de semana. Puntual: fecha concreta.</p></div></div>`;
+ const slots=weeklySlots(v);const slotCount=Math.min(3,Math.max(1,slots.length));
+ const weeklyFields=`<div id="weeklySlots" class="weekly-slot-panel" style="${v.repeat==='weekly'?'':'display:none'}"><label>Veces por semana<select name="weeklyCount" id="weeklyCount">${[1,2,3].map(n=>`<option value="${n}" ${n===slotCount?'selected':''}>${n} ${n===1?'vez':'veces'}</option>`).join('')}</select></label><p class="hint">Elige un día diferente y quién hace cada repetición. Son tareas independientes.</p>${[0,1,2].map(i=>`<div class="weekly-slot-row" data-slot-row="${i}" style="${i<slotCount?'':'display:none'}"><strong>Repetición ${i+1}</strong><div class="two-col"><label>Día<select name="slotDay${i}">${weekdays.map((d,n)=>`<option value="${n}" ${n===(slots[i]?.day??[1,3,5][i])?'selected':''}>${d}</option>`).join('')}</select></label><label>Responsable<select name="slotOwner${i}">${names.map(n=>`<option value="${n}" ${n===(slots[i]?.assignee||v.assignee)?'selected':''}>${n}</option>`).join('')}</select></label></div></div>`).join('')}</div>`;
+ return `<div class="overlay" data-act="closeModal"><div class="sheet edit-sheet" role="dialog" aria-modal="true" onclick="event.stopPropagation()"><div class="sheet-handle"></div><h2>${t?'Editar tarea':'Nueva tarea'}</h2><form id="taskForm" class="form-fields"><label>Nombre<input name="title" maxlength="120" required value="${esc(v.title)}" placeholder="Nombre de la tarea"></label><div class="two-col"><label>Categoría<select name="category">${cats.map(c=>`<option ${v.category===c?'selected':''}>${c}</option>`).join('')}</select></label><label>Responsable<select name="assignee">${names.map(n=>`<option ${v.assignee===n?'selected':''}>${n}</option>`).join('')}</select></label></div><div class="two-col"><label>Repetición<select name="repeat" id="taskRepeat">${[['weekly','Semanal'],['daily','Diaria'],['monthly','Mensual'],['yearly','Anual'],['once','Una vez'],['manual','Según necesidad']].map(([key,text])=>`<option value="${key}" ${v.repeat===key?'selected':''}>${text}</option>`).join('')}</select></label><label>Día habitual<select name="day">${weekdays.map((d,i)=>`<option value="${i}" ${(v.days||[1])[0]===i?'selected':''}>${d}</option>`).join('')}</select></label></div>${weeklyFields}<div class="two-col"><label>Semana del mes<select name="nth">${[1,2,3,4].map(x=>`<option value="${x}" ${Number(v.nth)===x?'selected':''}>${x}ª</option>`).join('')}</select></label><label>Mes (si es anual)<select name="month">${Array.from({length:12},(_,i)=>`<option value="${i+1}" ${Number(v.month)===i+1?'selected':''}>${new Date(2026,i,1).toLocaleDateString('es-ES',{month:'long'})}</option>`).join('')}</select></label></div><label>Tiempo activo estimado (minutos)<input type="number" name="minutes" min="1" max="1440" step="1" required value="${minutes(v)}"></label><label>Fecha (si es puntual)<input type="date" name="dueDate" value="${esc(v.dueDate||today())}"></label><label>Notas<textarea name="notes" rows="2">${esc(v.notes||'')}</textarea></label><button class="button primary wide" type="submit">${t?'Guardar cambios':'Crear tarea'}</button></form>${t?`<button class="button danger wide" data-act="archiveTask" data-id="${esc(t.id)}">Archivar tarea</button>`:''}<button class="button text wide" data-act="closeModal">Cancelar</button><p class="hint">Diaria: todos los días. Semanal: 1-3 días independientes con responsable propio. Mensual: n.º día de semana. Anual: mes y n.º día de semana. Puntual: fecha concreta.</p></div></div>`;
 }
 function render(){
  if(cloud && !cloudReady){renderLogin();return;}
@@ -403,11 +424,26 @@ function handleSubmit(e){if(e.target.id==='shoppingForm'){e.preventDefault();con
  const prev=modal?.kind==='edit'?state.tasks.find(x=>x.id===modal.id):null;
  const t=prev?{...prev}:newTask(title,String(f.get('category')),String(f.get('assignee')),Number(f.get('day')));
  Object.assign(t,{title,category:String(f.get('category')),assignee:String(f.get('assignee')),repeat:String(f.get('repeat')),days:[Number(f.get('day'))],nth:Number(f.get('nth')),month:Number(f.get('month')),dueDate:String(f.get('dueDate')),minutes:Math.max(1,Math.min(1440,Math.round(Number(f.get('minutes'))||1))),notes:String(f.get('notes')||'')});
+ if(t.repeat==='weekly'){
+  const count=Math.max(1,Math.min(3,Number(f.get('weeklyCount'))||1));
+  const slots=Array.from({length:count},(_,i)=>({day:Number(f.get('slotDay'+i)),assignee:String(f.get('slotOwner'+i))}));
+  if(new Set(slots.map(x=>x.day)).size!==slots.length){toast('Elige días diferentes para cada repetición.');return;}
+  if(slots.some(x=>!Number.isInteger(x.day)||x.day<0||x.day>6||!names.includes(x.assignee))){toast('Revisa los días y responsables.');return;}
+  t.weeklySlots=slots;t.days=slots.map(x=>x.day);t.assignee=slots[0].assignee;
+ }else{delete t.weeklySlots;}
  mutate({type:prev?'editTask':'addTask',task:t});modal=null;render();toast(prev?'Tarea actualizada.':'Tarea creada.');return;}
  if(e.target.id==='loginForm'){e.preventDefault();const f=new FormData(e.target);const email=String(f.get('email')||'');const pass=String(f.get('password')||'');const b=$('#loginButton');if(b)b.disabled=true;
  cloud.api.signInWithEmailAndPassword(cloud.auth,email,pass).catch(err=>{const div=$('#loginError');if(div)div.textContent='No se pudo iniciar sesión. Comprueba correo, contraseña y Firebase Authentication.';if(b)b.disabled=false;});return;}
 }
-function handleChange(e){if(e.target.id==='reminders'){mutate({type:'settings',settings:{reminders:e.target.checked}});if(e.target.checked)runReminders();}
+function handleChange(e){
+ if(e.target.id==='taskRepeat'){
+  const panel=$('#weeklySlots');if(panel)panel.style.display=e.target.value==='weekly'?'':'none';
+ }
+ if(e.target.id==='weeklyCount'){
+  const count=Number(e.target.value);
+  document.querySelectorAll('[data-slot-row]').forEach(row=>row.style.display=Number(row.dataset.slotRow)<count?'':'none');
+ }
+ if(e.target.id==='reminders'){mutate({type:'settings',settings:{reminders:e.target.checked}});if(e.target.checked)runReminders();}
  if(e.target.id==='reminderTime')mutate({type:'settings',settings:{reminderTime:e.target.value}});
 }
 el.addEventListener('click',handleClick);el.addEventListener('submit',handleSubmit);el.addEventListener('change',handleChange);

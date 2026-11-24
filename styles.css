@@ -10,3 +10,10 @@
 /* Reparto ponderado por esfuerzo */
 .effort-percentages{display:flex;justify-content:space-between;margin-top:9px;font-size:13px;color:#456b54}
 .weekly-totals b{font-size:14px}.weekly-totals small{line-height:1.4}
+
+/* Editable frequency and individual owners for up to three weekly occurrences */
+.weekly-slot-panel{padding:14px;border-radius:14px;background:var(--surface, #f5f5f2);border:1px solid #d9ded8;display:grid;gap:10px}
+.weekly-slot-panel[style*="display:none"]{display:none}
+.weekly-slot-row{padding:10px;border:1px solid #d9ded8;border-radius:10px;background:rgba(255,255,255,.65)}
+.weekly-slot-row strong{font-size:.85rem;display:block;margin-bottom:6px}
+.weekly-slot-row .two-col{margin:0}

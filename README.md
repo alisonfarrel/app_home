@@ -117,3 +117,11 @@ El marcador de cumplimiento (+1/−1) **es independiente** de estos minutos. La 
 ### Lavadoras por fases
 
 Cada colada se divide en dos tareas separadas: **poner lavadora (5 min)** y **recoger/tender/doblar/guardar (15 min)**. Así pueden tener responsables diferentes. Una instalación que ya tenga tareas de lavadora combinadas convierte esas tareas en «poner lavadora» y crea su pareja «recoger lavadora». Las finalizaciones anteriores siguen registradas; revisar valores iniciales si el trabajo habitual difiere.
+
+## V6: varias repeticiones por semana con responsables diferentes
+
+En **Tareas → Crear/Editar → Repetición: Semanal**, seleccionar **1, 2 o 3 veces por semana**. Cada repetición permite elegir su propio día y responsable. No se admiten días duplicados dentro de la misma tarea. Los minutos estimados se contabilizan una vez por cada repetición programada. Las apariciones son independientes (`id@fecha`): una atrasada no reemplaza la siguiente. Las tareas antiguas de un solo día se mantienen sin necesitar migración.
+
+Para las parejas de preparación de comida y fregado, editar una plantilla semanal sincroniza los mismos días y asigna la persona contraria a cada fregado. Las reasignaciones de repeticiones concretas mantienen la regla de que quien cocina no recoge.
+
+Los cambios de calendario alteran futuras ocurrencias y, como en versiones anteriores, pueden cambiar el cálculo histórico de ocurrencias no completadas; para una política de historial inmutable habría que versionar calendarios.
