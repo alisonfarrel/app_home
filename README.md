@@ -1,3 +1,22 @@
+# Nuestro Hogar v9.1 — actualización de sincronización y protección de datos
+
+Cambios:
+- Fuerza recarga de config.js, app.js, styles.css y service worker mediante versiones 9.1.
+- La primera vez que arranca esta versión preserva una copia del estado local en `localStorage` con la clave `nuestro_hogar_backup_pre_firebase_v91`, antes de que Firebase pueda sustituir los datos locales.
+- **Ajustes > Proteger tus datos > Descargar copia local (.json)** permite guardar esa copia en Archivos.
+- NO importa ni fusiona automáticamente copias antiguas en la nube: no debe sobrescribirse el documento de Firebase sin verificar primero su contenido y conservar ambos dispositivos.
+
+## Procedimiento seguro
+1. Publica todos los archivos de esta versión en GitHub Pages (mantén `config.js` con TU configuración real de Firebase, porque en el ZIP se entrega como `null`).
+2. Antes de borrar nada en cualquiera de los iPhone, abre la PWA en su sesión habitual. La actualización crea el respaldo automáticamente, incluso si empieza sesión con Firebase.
+3. En Ajustes, pulsa Descargar copia local (.json) en cada dispositivo y guarda los archivos con nombres diferenciados. Comprueba que se hayan guardado.
+4. Entra con la MISMA cuenta de Firebase desde ambos teléfonos y confirma Ajustes > Almacenamiento: Firebase sincronizado.
+5. Verifica la sincronización con una tarea de prueba. No importes todavía los dos respaldos: podrían contener datos distintos. Revisa qué tareas personalizadas necesitas recuperar antes de cualquier fusión.
+
+**Importante:** al actualizar GitHub, conserva el `config.js` que funciona actualmente, o pega de nuevo tu configuración real. No borres Safari ni desinstales la aplicación hasta tener y revisar ambas copias.
+
+---
+
 # Nuestro Hogar v9.0 — Más alegre y divertido
 
 Esta actualización visual mantiene el modelo de datos y todas las reglas de la v8.0.

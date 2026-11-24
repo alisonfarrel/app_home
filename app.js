@@ -154,6 +154,27 @@ function migrateToMinutes(s){
 }
 const STORAGE='nuestro_hogar_v1';
 function loadLocal(){try{const s=JSON.parse(localStorage.getItem(STORAGE));return s?.version===1?migrateToMinutes(s):makeSeed();}catch{return makeSeed();}}
+// Snapshot de seguridad creado ANTES de que Firestore pueda sustituir el estado local.
+// No se modifica en sincronizaciones posteriores.
+const LOCAL_BACKUP_KEY='nuestro_hogar_backup_pre_firebase_v91';
+try {
+ const stored=localStorage.getItem('nuestro_hogar_v1');
+ if(stored && !localStorage.getItem(LOCAL_BACKUP_KEY)) {
+  const parsed=JSON.parse(stored);
+  if(parsed && parsed.version===1 && Array.isArray(parsed.tasks)) localStorage.setItem(LOCAL_BACKUP_KEY, stored);
+ }
+} catch(err) { console.warn('No se pudo preparar copia local',err); }
+function downloadLocalBackup(){
+ const json=localStorage.getItem(LOCAL_BACKUP_KEY)||localStorage.getItem('nuestro_hogar_v1');
+ if(!json){toast('No hay una copia local para descargar.');return;}
+ const blob=new Blob([json],{type:'application/json;charset=utf-8'});
+ const url=URL.createObjectURL(blob);
+ const link=document.createElement('a');
+ link.href=url; link.download='nuestro-hogar-copia-local-'+new Date().toISOString().slice(0,10)+'.json';
+ document.body.appendChild(link);link.click();link.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),12000);
+ toast('Copia local preparada. Guárdala en Archivos.');
+}
 let state=loadLocal();
 let currentUser=localStorage.getItem('hogar_user')==='José'?'José':'Alicia';
 let tab='today', selectedDay=today(), selectedWeek=weekStart(today()), taskFilter='Todas', overviewRange='week', modal=null, showDone=false;
@@ -427,7 +448,7 @@ function viewPoints(){const p=score();const rows=names.map(n=>({name:n,score:p.p
  <div class="info"><strong>Reglas</strong><p>+1 por tarea completada dentro de plazo. −1 por tarea atrasada (una sola vez por ocurrencia). −1 a quien cede una tarea al reasignarla. Las tareas realizadas fuera de plazo no suman punto positivo. Las tareas omitidas se excluyen del marcador.</p></div>`;
 }
 function viewSettings(){return `${heading('Ajustes','Preferencias de vuestro hogar')}<div class="settings-card"><h2>Acceso</h2><p>Perfil activo</p>${usernameButtons()}<div class="setting-row"><div><b>Almacenamiento</b><small>${cloudReady?'Firebase · sincronizado':'Local · solo este dispositivo'}</small></div><span class="dot ${cloudReady?'connected':''}"></span></div>${cloudReady?'<button class="button light" data-act="logout">Cerrar sesión compartida</button>':'<p class="hint">Para compartir datos entre dos iPhone, configura Firebase siguiendo README.md.</p>'}</div>
- <div class="settings-card"><h2>Recordatorios</h2><p>La aplicación puede avisar de tareas pendientes cuando está abierta. Los avisos en segundo plano requieren configurar un servicio push adicional.</p><label class="toggle-row"><span>Activar avisos en la app</span><input id="reminders" type="checkbox" ${state.settings.reminders?'checked':''}></label><label class="toggle-row"><span>Hora del recordatorio</span><input type="time" id="reminderTime" value="${esc(state.settings.reminderTime||'19:00')}"></label><button class="button light" data-act="requestNotify">Permitir notificaciones</button></div>
+ <div class="settings-card"><h2>Proteger tus datos</h2><p>Antes de migrar a Firebase, guarda una copia de las tareas que tenías en este dispositivo. Esta copia se creó antes de la primera sincronización con esta versión y no se borra al conectarse.</p><button class="button light wide" data-act="downloadLocalBackup">Descargar copia local (.json)</button><p class="hint">La copia descargada no se sube automáticamente a Firebase. Consérvala hasta verificar qué tareas hay en la nube.</p></div><div class="settings-card"><h2>Recordatorios</h2><p>La aplicación puede avisar de tareas pendientes cuando está abierta. Los avisos en segundo plano requieren configurar un servicio push adicional.</p><label class="toggle-row"><span>Activar avisos en la app</span><input id="reminders" type="checkbox" ${state.settings.reminders?'checked':''}></label><label class="toggle-row"><span>Hora del recordatorio</span><input type="time" id="reminderTime" value="${esc(state.settings.reminderTime||'19:00')}"></label><button class="button light" data-act="requestNotify">Permitir notificaciones</button></div>
  <div class="info"><strong>Sobre el reparto</strong><p>Las tareas personales no están incluidas. El robot funciona automáticamente y solo se programa su limpieza semanal. Las comidas de fin de semana no se asignan.</p></div>`;}
 const icons={
  home:'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',
@@ -450,7 +471,7 @@ function modalHTML(){if(!modal)return '';
 function render(){
  if(cloud && !cloudReady){renderLogin();return;}
  const content={today:viewToday,tasks:viewTasks,shopping:viewShopping,overview:viewOverview,settings:viewSettings}[tab]();
- el.innerHTML=`<div class="shell"><header class="topbar"><div class="brand"><div class="brand-logo">${svgIcon('home')}</div><div><strong>Nuestro Hogar</strong><span>Alicia & José · v9.0</span></div></div><div class="top-right"><span class="sync-status ${cloudReady?'online':''}" title="${cloudReady?'Sincronización conectada':'Modo local'}"></span><button class="profile-dot ${currentUser==='José'?'jose':''}" data-act="switchUser" aria-label="Cambiar usuario">${currentUser[0]}</button></div></header><main>${content}</main><nav class="bottom-nav">${navItems.map(([key,label,glyph])=>`<button data-tab="${key}" class="${tab===key?'active':''}"><span class="nav-icon">${svgIcon(glyph)}</span><span>${label}</span></button>`).join('')}</nav></div><div id="toast" class="toast" role="status"></div>${modalHTML()}`;
+ el.innerHTML=`<div class="shell"><header class="topbar"><div class="brand"><div class="brand-logo">${svgIcon('home')}</div><div><strong>Nuestro Hogar</strong><span>Alicia & José · v9.1</span></div></div><div class="top-right"><span class="sync-status ${cloudReady?'online':''}" title="${cloudReady?'Sincronización conectada':'Modo local'}"></span><button class="profile-dot ${currentUser==='José'?'jose':''}" data-act="switchUser" aria-label="Cambiar usuario">${currentUser[0]}</button></div></header><main>${content}</main><nav class="bottom-nav">${navItems.map(([key,label,glyph])=>`<button data-tab="${key}" class="${tab===key?'active':''}"><span class="nav-icon">${svgIcon(glyph)}</span><span>${label}</span></button>`).join('')}</nav></div><div id="toast" class="toast" role="status"></div>${modalHTML()}`;
 }
 function findOccurrence(id){const at=id.lastIndexOf('@');if(at===-1)return null;const t=state.tasks.find(x=>x.id===id.slice(0,at));if(!t)return null;return makeOccurrence(t,id.slice(at+1));}
 function reassignOccurrence(o,to){if(o.assignee===to)return;const at=new Date().toISOString();mutate({type:'reassign',id:o.id,from:o.assignee,to,at,due:o.date,eventId:uid()});
@@ -490,6 +511,7 @@ function handleClick(e){const btn=e.target.closest('button,[data-act],[data-tab]
   case 'shoppingDelete':mutate({type:'shoppingDelete',id});break;
   case 'shoppingClear':mutate({type:'shoppingClear'});break;
   case 'requestNotify':if('Notification' in window){Notification.requestPermission().then(p=>toast(p==='granted'?'Notificaciones permitidas.':'No se concedió permiso.'));}else toast('Este navegador no ofrece notificaciones.');break;
+  case 'downloadLocalBackup':downloadLocalBackup();break;
   case 'logout':if(cloud)cloud.api.signOut(cloud.auth);break;
  }
 }
@@ -544,6 +566,6 @@ async function initCloud(){if(!window.HOGAR_FIREBASE_CONFIG?.apiKey){render();re
   });
  }catch(err){console.error(err);render();setTimeout(()=>toast('No se pudo cargar Firebase; se mantiene la copia local.'),500);}
 }
-if('serviceWorker' in navigator && location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=6.1', {updateViaCache:'none'}).then(reg=>reg.update()).catch(console.warn);
+if('serviceWorker' in navigator && location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=9.1', {updateViaCache:'none'}).then(reg=>reg.update()).catch(console.warn);
 setInterval(()=>{if(!cloud||cloudReady){runReminders();if(tab==='today'||tab==='overview')render();}},60000);
 initCloud();
