@@ -1,12 +1,9 @@
-// Modo local: dejar null. Para sincronizar ambos iPhone, pegar aquí
-// el objeto de configuración web obtenido en Firebase Console.
-// Las claves web de Firebase son públicas; la protección está en Auth + reglas Firestore.
-window.HOGAR_FIREBASE_CONFIG = null;
-/* Ejemplo:
-window.HOGAR_FIREBASE_CONFIG = {
-  apiKey: "...",
-  authDomain: "tu-proyecto.firebaseapp.com",
-  projectId: "tu-proyecto",
-  appId: "..."
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyBixFWbQ70TM7bIqMpcMwNoDTMnRUVrr3E",
+  authDomain: "home-addcc.firebaseapp.com",
+  projectId: "home-addcc",
+  storageBucket: "home-addcc.firebasestorage.app",
+  messagingSenderId: "990023390677",
+  appId: "1:990023390677:web:45dfbfb4f34ad0ffb9995c"
 };
-*/
